@@ -1,6 +1,6 @@
 {application, beset,
  [
-  {description, ""},
+  {description, "Simple set database for trivial queries."},
   {vsn, "1"},
   {registered, []},
   {applications, [
