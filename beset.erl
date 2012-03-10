@@ -8,14 +8,22 @@ init()->
 loop()->
     ok.
 
-
+ %% @doc Returns a list of all sets in the store that are subsets of the goven set.
 subsets(Set)->
     err.
 
+
+ %% @doc Updates/replaces the given set as idientified by the key with the contents of Set.
+
 update_set(Key, Set)->
     err.
+
+ %% @doc Removes specified set from the store.
+
 delete_set(Key)->
     err.
+
+ %% @doc Adds a set to the store.
 
 add_set(Key, Set)->
     err.
