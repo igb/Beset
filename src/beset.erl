@@ -1,9 +1,26 @@
 -module(beset).
 
--export([init/0, subsets/1, update_set/2, delete_set/1, add_set/2]).
 
-init()->
-    ok.
+-export([init/1,subsets/1, update_set/2, delete_set/1, add_set/2]).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+
+
+
+init(Port)->
+    io:fwrite("~ninit w:~p~n", [Port]),
+    GetFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body)-> 
+			io:fwrite("~nparams:~p~n", [Params]),
+			
+			gen_tcp:send(Sock, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nHelo World!\r\n\r\n") 
+		end,
+    Functions=[{'GET', GetFunction}],
+
+simpleservice:start(Port, Functions),
+    {ok, running}.
 
 loop()->
     ok.
@@ -27,3 +44,10 @@ delete_set(Key)->
 
 add_set(Key, Set)->
     err.
+
+
+-ifdef(TEST).
+
+simple_test() ->
+        ok.% = init(9999).
+-endif.

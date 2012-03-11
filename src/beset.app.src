@@ -7,6 +7,6 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { beset_app, []}},
+  {mod, { beset_app, [1234]}},
   {env, []}
  ]}.
