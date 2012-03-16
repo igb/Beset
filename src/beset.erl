@@ -1,7 +1,7 @@
 -module(beset).
 
 
--export([init/1,subsets/1, update_set/2, delete_set/1, add_set/2]).
+-export([init/1,loop/1,subsets/2, update_set/2, delete_set/2, add_set/2]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -12,42 +12,93 @@
 
 init(Port)->
     io:fwrite("~ninit w:~p~n", [Port]),
-    GetFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body)-> 
+    GetFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
 			io:fwrite("~nparams:~p~n", [Params]),
-			
+			io:fwrite("~npath:~p~n", [PathString]),
+			io:fwrite("~npid:~p~n", ["mypid"]),			
 			gen_tcp:send(Sock, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nHelo World!\r\n\r\n") 
 		end,
     Functions=[{'GET', GetFunction}],
 
-simpleservice:start(Port, Functions),
+    SetDb=[],
+    Pid=spawn(?MODULE, loop, [SetDb]),
+    simpleservice:start(Port, Functions, Pid),
+
     {ok, running}.
 
-loop()->
-    ok.
+loop(SetDb)->
+    receive
+	{get, SetId, Pid} ->
+	    {ok, NewSetDb}=subsets(SetId, SetDb),
+	    Pid ! ok,
+	    ?MODULE:loop(NewSetDb);
+	{post, Set, Pid}->
+	    {ok, SetId, NewSetDb}=add_set(Set, SetDb),
+	    Pid ! {ok, SetId},
+	    ?MODULE:loop(NewSetDb);
+	{delete, SetId, Pid} ->
+	    {ok, NewSetDb}=delete_set(SetId, SetDb),
+	    Pid ! ok,
+	    ?MODULE:loop(NewSetDb);
+	{put, SetId, Set, Pid} ->
+	    {ok, NewSetDb}=update_set(SetId, SetDb),
+	    Pid ! ok,
+	    ?MODULE:loop(NewSetDb);
+	{_, Pid} ->
+	    Pid ! {err, no_such_method},
+	    ?MODULE:loop(SetDb)
+    end.
+    
+	    
 
  %% @doc Returns a list of all sets in the store that are subsets of the goven set.
-subsets(Set)->
-    err.
+subsets(Set, SetDb)->
+    lists:filter(fun(X)->{Id, StoredSet}=X,sets:is_subset(StoredSet, Set) end, SetDb).
 
 
  %% @doc Updates/replaces the given set as idientified by the key with the contents of Set.
 
-update_set(Key, Set)->
+update_set(Set, SetDb)->
     err.
 
  %% @doc Removes specified set from the store.
 
-delete_set(Key)->
-    err.
+delete_set(Key, SetDb)->
+    lists:filter(fun(X)->{Id, StoredSet}=X,case Id of 
+					       Key -> false;
+					       _ -> true
+					   end 
+		 end, SetDb).
 
  %% @doc Adds a set to the store.
 
-add_set(Key, Set)->
-    err.
+add_set(Set, SetDb)->
+    lists:append(SetDb, {Set}).
 
 
 -ifdef(TEST).
 
-simple_test() ->
-        ok.% = init(9999).
+
+
+delete_set_test()->
+    RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
+    YellowGreen=sets:add_element(yellow, sets:add_element(green, sets:new())),
+    OrangeBlue=sets:add_element(orange, sets:add_element(blue, sets:new())),
+    RedBlueYellowGreen=sets:add_element(green, sets:add_element(yellow, sets:add_element(blue, sets:add_element(red, sets:new())))),
+    TestData=[{red_blue, RedBlue}, {yellow_green, YellowGreen}, {orange_blue, OrangeBlue}],
+    ?assertEqual(3, length(TestData)),
+    Results=?MODULE:delete_set(red_blue, TestData),
+    ?assertEqual(2, length(Results)).
+
+
+
+subsets_test()->
+    RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
+    YellowGreen=sets:add_element(yellow, sets:add_element(green, sets:new())),
+    OrangeBlue=sets:add_element(orange, sets:add_element(blue, sets:new())),
+    RedBlueYellowGreen=sets:add_element(green, sets:add_element(yellow, sets:add_element(blue, sets:add_element(red, sets:new())))),
+    TestData=[{red_blue, RedBlue}, {yellow_green, YellowGreen}, {orange_blue, OrangeBlue}],
+    Results=?MODULE:subsets(RedBlueYellowGreen, TestData),
+    ?assertEqual(2, length(Results)).
+
 -endif.

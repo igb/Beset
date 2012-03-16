@@ -36,7 +36,7 @@ init([Port]) ->
      {{one_for_one, 5, 10}, 
      [{
        beset_sup, 
-       {beset_sup, foo, [Port]}, 
+       {beset, init, [Port]}, 
        permanent, 
        brutal_kill, 
        worker,
