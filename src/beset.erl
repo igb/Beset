@@ -1,7 +1,7 @@
 -module(beset).
 
 
--export([init/1,loop/1,subsets/2, update_set/2, delete_set/2, add_set/2]).
+-export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -41,7 +41,7 @@ loop(SetDb)->
 	    Pid ! ok,
 	    ?MODULE:loop(NewSetDb);
 	{put, SetId, Set, Pid} ->
-	    {ok, NewSetDb}=update_set(SetId, SetDb),
+	    {ok, NewSetDb}=update_set(SetId, Set, SetDb),
 	    Pid ! ok,
 	    ?MODULE:loop(NewSetDb);
 	{_, Pid} ->
@@ -58,8 +58,9 @@ subsets(Set, SetDb)->
 
  %% @doc Updates/replaces the given set as idientified by the key with the contents of Set.
 
-update_set(Set, SetDb)->
-    err.
+update_set(Key, Set, SetDb)->
+    NewDb=lists:keystore(Key, 1, SetDb, Set),
+    {Key, NewDb}.
 
  %% @doc Removes specified set from the store.
 
@@ -70,15 +71,30 @@ delete_set(Key, SetDb)->
 					   end 
 		 end, SetDb).
 
+
  %% @doc Adds a set to the store.
 
 add_set(Set, SetDb)->
-    lists:append(SetDb, {Set}).
+    ?MODULE: update_set(generate_key(), Set, SetDb).
+
+
+
+
+
+%% @doc create a unique id/key
+generate_key()->
+    {A,B,C}=now(),
+    <<Y:128>>=erlang:md5(atom_to_list(node())), lists:flatten(io_lib:format("~32.16.0b", [Y])),
+        lists:flatten([Y,io_lib:format("~p", [A]),io_lib:format("~p", [B]),io_lib:format("~p", [C])]).
 
 
 -ifdef(TEST).
 
 
+add_set_test()->
+    RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
+    {Key, Db}=add_set(RedBlue,[]),
+    ?assertEqual(1, length(Db)).
 
 delete_set_test()->
     RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
