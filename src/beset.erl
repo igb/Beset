@@ -51,6 +51,8 @@ loop(SetDb)->
     
 	    
 
+    
+
  %% @doc Returns a list of all sets in the store that are subsets of the goven set.
 subsets(Set, SetDb)->
     lists:filter(fun(X)->{Id, StoredSet}=X,sets:is_subset(StoredSet, Set) end, SetDb).
@@ -65,11 +67,7 @@ update_set(Key, Set, SetDb)->
  %% @doc Removes specified set from the store.
 
 delete_set(Key, SetDb)->
-    lists:filter(fun(X)->{Id, StoredSet}=X,case Id of 
-					       Key -> false;
-					       _ -> true
-					   end 
-		 end, SetDb).
+   lists:keydelete(Key, 1, SetDb).
 
 
  %% @doc Adds a set to the store.
