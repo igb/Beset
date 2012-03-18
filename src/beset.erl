@@ -1,7 +1,7 @@
 -module(beset).
 
 
--export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0]).
+-export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0, set_to_json/1, list_to_json/1]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -18,12 +18,20 @@ init(Port)->
 			io:fwrite("~npid:~p~n", ["mypid"]),			
 			gen_tcp:send(Sock, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nHelo World!\r\n\r\n") 
 		end,
-    Functions=[{'GET', GetFunction}],
+    DeleteFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
+			   [_|SetId]=PathString,
+			   Pid ! {delete, SetId, self()},
+			   receive
+			       ok -> gen_tcp:send(Sock, "HTTP/1.1 204 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\n"); 
+			       _  -> gen_tcp:send(Sock, "HTTP/1.1 500 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nAn error has occurred!\r\n\r\n")
+				   
+			   end
+		   end,
+    Functions=[{'GET', GetFunction}, {'DELETE', DeleteFunction}],
 
     SetDb=[],
     Pid=spawn(?MODULE, loop, [SetDb]),
     simpleservice:start(Port, Functions, Pid),
-
     {ok, running}.
 
 loop(SetDb)->
@@ -67,13 +75,16 @@ update_set(Key, Set, SetDb)->
  %% @doc Removes specified set from the store.
 
 delete_set(Key, SetDb)->
-   lists:keydelete(Key, 1, SetDb).
+    io:fwrite("key to delete: ~p~n", [Key]),
+    NewSetDb=lists:keydelete(Key, 1, SetDb),
+    {ok, NewSetDb}.
+
 
 
  %% @doc Adds a set to the store.
 
 add_set(Set, SetDb)->
-    ?MODULE: update_set(generate_key(), Set, SetDb).
+    ?MODULE:update_set(generate_key(), Set, SetDb).
 
 
 
@@ -86,9 +97,46 @@ generate_key()->
         lists:flatten([Y,io_lib:format("~p", [A]),io_lib:format("~p", [B]),io_lib:format("~p", [C])]).
 
 
+
+%% @doc serialize erlang set/term to JSON
+set_to_json(Set)->
+    list_to_json(sets:to_list(Set)).
+
+
+%% @doc serialize erlang set/term to JSON
+list_to_json(List)->
+    list_to_json(List, ["["]).
+list_to_json([H|T], Acc) ->
+    Item=lists:flatten(["\"", H, "\""]),
+    case length(T) of
+	0->list_to_json(T, lists:append([Acc,  Item]));
+	_ ->list_to_json(T, lists:append([Acc, Item, ", "]))
+    end;
+list_to_json([], Acc) ->
+    lists:flatten([Acc, "]"]).
+    
+    
+
+%% @doc read erlang
+json_to_list(Json)->
+    string:tokens(Json, "[],\" ").
+
+
+    
+
+
 -ifdef(TEST).
 
 
+json_to_list_test()->
+    Json="[\"Hello\", \"World\", \"Bar\", \"Foo\"]",
+    List=["Hello", "World", "Bar", "Foo"],
+    ?assertEqual(List,json_to_list(Json)).
+
+list_to_json_test()->
+    List=["Hello", "World", "Bar", "Foo"],
+    ?assertEqual("[\"Hello\", \"World\", \"Bar\", \"Foo\"]",list_to_json(List)).
+    
 add_set_test()->
     RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
     {Key, Db}=add_set(RedBlue,[]),
@@ -101,7 +149,7 @@ delete_set_test()->
     RedBlueYellowGreen=sets:add_element(green, sets:add_element(yellow, sets:add_element(blue, sets:add_element(red, sets:new())))),
     TestData=[{red_blue, RedBlue}, {yellow_green, YellowGreen}, {orange_blue, OrangeBlue}],
     ?assertEqual(3, length(TestData)),
-    Results=?MODULE:delete_set(red_blue, TestData),
+    {ok, Results}=?MODULE:delete_set(red_blue, TestData),
     ?assertEqual(2, length(Results)).
 
 
