@@ -1,7 +1,7 @@
 -module(beset).
 
 
--export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0, set_to_json/1, list_to_json/1]).
+-export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0, set_to_json/1, list_to_json/1, json_to_list/1]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -12,12 +12,14 @@
 
 init(Port)->
     io:fwrite("~ninit w:~p~n", [Port]),
+
     GetFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
 			io:fwrite("~nparams:~p~n", [Params]),
 			io:fwrite("~npath:~p~n", [PathString]),
 			io:fwrite("~npid:~p~n", ["mypid"]),			
 			gen_tcp:send(Sock, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nHelo World!\r\n\r\n") 
 		end,
+
     DeleteFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
 			   [_|SetId]=PathString,
 			   Pid ! {delete, SetId, self()},
@@ -27,7 +29,19 @@ init(Port)->
 				   
 			   end
 		   end,
-    Functions=[{'GET', GetFunction}, {'DELETE', DeleteFunction}],
+
+    PostFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
+			io:fwrite("~nbody:~p~n", [Body]),
+			 Pid ! {post, ?MODULE:json_to_list(Body), self()},
+			 io:fwrite("~nadd sent", []),
+			receive
+			    {ok, SetId} -> gen_tcp:send(Sock, lists:flatten(["HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\n", SetId, "\r\n\r\n"])); 
+			    _  -> io:fwrite("~nadd err", []),gen_tcp:send(Sock, "HTTP/1.1 500 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nAn error has occurred!\r\n\r\n")
+			
+			end
+		   end,
+
+    Functions=[{'GET', GetFunction}, {'DELETE', DeleteFunction}, {'POST', PostFunction}],
 
     SetDb=[],
     Pid=spawn(?MODULE, loop, [SetDb]),
@@ -41,6 +55,7 @@ loop(SetDb)->
 	    Pid ! ok,
 	    ?MODULE:loop(NewSetDb);
 	{post, Set, Pid}->
+	    io:fwrite("in loop add", []),
 	    {ok, SetId, NewSetDb}=add_set(Set, SetDb),
 	    Pid ! {ok, SetId},
 	    ?MODULE:loop(NewSetDb);
@@ -69,8 +84,9 @@ subsets(Set, SetDb)->
  %% @doc Updates/replaces the given set as idientified by the key with the contents of Set.
 
 update_set(Key, Set, SetDb)->
-    NewDb=lists:keystore(Key, 1, SetDb, Set),
-    {Key, NewDb}.
+    io:fwrite("in update", []),
+    NewDb=lists:keystore(Key, 1, SetDb, {Key,Set}),
+    {ok, Key, NewDb}.
 
  %% @doc Removes specified set from the store.
 
@@ -94,7 +110,7 @@ add_set(Set, SetDb)->
 generate_key()->
     {A,B,C}=now(),
     <<Y:128>>=erlang:md5(atom_to_list(node())), lists:flatten(io_lib:format("~32.16.0b", [Y])),
-        lists:flatten([Y,io_lib:format("~p", [A]),io_lib:format("~p", [B]),io_lib:format("~p", [C])]).
+        lists:flatten([io_lib:format("~p",[Y]),io_lib:format("~p", [A]),io_lib:format("~p", [B]),io_lib:format("~p", [C])]).
 
 
 
@@ -139,7 +155,7 @@ list_to_json_test()->
     
 add_set_test()->
     RedBlue=sets:add_element(blue, sets:add_element(red, sets:new())),
-    {Key, Db}=add_set(RedBlue,[]),
+    {ok,Key, Db}=add_set(RedBlue,[]),
     ?assertEqual(1, length(Db)).
 
 delete_set_test()->
