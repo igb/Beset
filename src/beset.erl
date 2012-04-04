@@ -1,7 +1,7 @@
 -module(beset).
 
 
--export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, generate_key/0, set_to_json/1, list_to_json/1, json_to_list/1]).
+-export([init/1,loop/1,subsets/2, update_set/3, delete_set/2, add_set/2, get_set/2, generate_key/0, set_to_json/1, list_to_json/1, json_to_list/1]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -16,33 +16,34 @@ init(Port)->
     GetFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
 			io:fwrite("~nparams:~p~n", [Params]),
 			io:fwrite("~npath:~p~n", [PathString]),
-			io:fwrite("~npid:~p~n", ["mypid"]),			
-			gen_tcp:send(Sock, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nHelo World!\r\n\r\n") 
+
+			[_|SetId]=PathString,
+			Pid ! {get, SetId, self()},
+			receive
+			    {ok, Set} -> 			io:fwrite("~nset:~p~n", [Set]), simpleservice:send_message(Sock, ?MODULE:set_to_json(Set), "application/json", 200, "OK");
+			     _  -> simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")			 
+			end
 		end,
 
     DeleteFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
 			   [_|SetId]=PathString,
 			   Pid ! {delete, SetId, self()},
 			   receive
-			       ok -> gen_tcp:send(Sock, "HTTP/1.1 204 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\n"); 
-			       _  -> gen_tcp:send(Sock, "HTTP/1.1 500 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nAn error has occurred!\r\n\r\n")
-				   
+			       ok -> simpleservice:send_message(Sock, nil, "text/plain", 204, "No Content");
+			       _  -> simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")
 			   end
 		   end,
 
     PostFunction=fun(Sock, PathString, QueryString, Params, Fragment, Headers, Body, Pid)-> 
-			io:fwrite("~nbody:~p~n", [Body]),
-			 Pid ! {post, ?MODULE:json_to_list(Body), self()},
-			 io:fwrite("~nadd sent", []),
-			receive
-			    {ok, SetId} -> gen_tcp:send(Sock, lists:flatten(["HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\n", SetId, "\r\n\r\n"])); 
-			    _  -> io:fwrite("~nadd err", []),gen_tcp:send(Sock, "HTTP/1.1 500 No Content\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\nAn error has occurred!\r\n\r\n")
-			
-			end
-		   end,
-
+			 Pid ! {post, sets:from_list(?MODULE:json_to_list(Body)), self()},
+			 receive
+			     {ok, SetId} -> simpleservice:send_message(Sock, SetId, "text/plain", 200, "OK");
+			     _  -> simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")			 
+			 end
+		 end,
+    
     Functions=[{'GET', GetFunction}, {'DELETE', DeleteFunction}, {'POST', PostFunction}],
-
+    
     SetDb=[],
     Pid=spawn(?MODULE, loop, [SetDb]),
     simpleservice:start(Port, Functions, Pid),
@@ -51,9 +52,9 @@ init(Port)->
 loop(SetDb)->
     receive
 	{get, SetId, Pid} ->
-	    {ok, NewSetDb}=subsets(SetId, SetDb),
-	    Pid ! ok,
-	    ?MODULE:loop(NewSetDb);
+	    Result=get_set(SetId, SetDb),
+	    Pid ! Result,
+	    ?MODULE:loop(SetDb);
 	{post, Set, Pid}->
 	    io:fwrite("in loop add", []),
 	    {ok, SetId, NewSetDb}=add_set(Set, SetDb),
@@ -77,6 +78,22 @@ loop(SetDb)->
     
 
  %% @doc Returns a list of all sets in the store that are subsets of the goven set.
+
+get_set(SetId, SetDb)->
+    
+    Result=lists:keyfind(SetId, 1, SetDb),
+    case Result of 
+	{SetId, Set}->
+	    {ok, Set};
+	_ ->false
+    end. 
+
+
+
+
+
+ %% @doc Returns a list of all sets in the store that are subsets of the given set.
+
 subsets(Set, SetDb)->
     lists:filter(fun(X)->{Id, StoredSet}=X,sets:is_subset(StoredSet, Set) end, SetDb).
 
@@ -116,7 +133,9 @@ generate_key()->
 
 %% @doc serialize erlang set/term to JSON
 set_to_json(Set)->
-    list_to_json(sets:to_list(Set)).
+    SetList=sets:to_list(Set),
+    io:fwrite("~p~n", [SetList]),
+    list_to_json(SetList).
 
 
 %% @doc serialize erlang set/term to JSON
@@ -142,6 +161,12 @@ json_to_list(Json)->
 
 
 -ifdef(TEST).
+
+set_to_json_test()->
+    OneTwo=sets:add_element("1", sets:add_element("2", sets:new())),
+    X=set_to_json(OneTwo),
+    ?assertEqual(lists:sort("[\"1\", \"2\"]"),lists:sort(X)).
+
 
 
 json_to_list_test()->
