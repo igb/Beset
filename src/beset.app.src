@@ -3,8 +3,7 @@
   {description, "Simple set database for trivial queries."},
   {vsn, "1"},
   {registered, []},
-  {applications, [
-                  kernel,
+  {applications, [kernel,
                   stdlib
                  ]},
   {mod, { beset_app, [9999]}},

@@ -18,10 +18,33 @@ init(Port)->
 			io:fwrite("~npath:~p~n", [PathString]),
 
 			[_|SetId]=PathString,
-			Pid ! {get, SetId, self()},
-			receive
-			    {ok, Set} -> 			io:fwrite("~nset:~p~n", [Set]), simpleservice:send_message(Sock, ?MODULE:set_to_json(Set), "application/json", 200, "OK");
-			     _  -> simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")			 
+			case PathString of
+			    "/subsets" -> {"superset", SupersetJson}=lists:keyfind("superset", 1, Params),
+					  io:format("json: ~p~n", [SupersetJson]),
+					  SupersetList=json_to_list(SupersetJson),
+					  io:format("list: ~p~n", [SupersetList]),
+					  SupersetSet=sets:from_list(SupersetList),
+					  io:format("set: ~p~n", [SupersetSet]),
+					  Pid ! {subset_query, SupersetSet, self()},
+					  
+					 receive
+					     %%todo: collapse map into foldl
+					     {ok, Subsets}->F=fun(Subset)->
+								      {Id, Set}=Subset,lists:flatten(["{\"", Id, "\": ", set_to_json(Set), "}"]) 
+							      end,
+							    X=lists:map(F, Subsets),
+							    io:format("~p~n", [X]),
+							    Response=lists:flatten(["[" , string:join(X, ","),"]"]),
+							    simpleservice:send_message(Sock, Response, "application/json", 200, "Subsets");
+					     X -> io:format("~p~n", [X]), simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")			 
+					 end;
+			    _ ->
+			    
+				Pid ! {get, SetId, self()},
+				receive
+				    {ok, Set} -> io:fwrite("~nset:~p~n", [Set]), simpleservice:send_message(Sock, ?MODULE:set_to_json(Set), "application/json", 200, "OK");
+				    _  -> simpleservice:send_message(Sock, "An error has occurred!", "text/plain", 500, "Internal Server Error")			 
+				end
 			end
 		end,
 
@@ -54,6 +77,10 @@ loop(SetDb)->
 	{get, SetId, Pid} ->
 	    Result=get_set(SetId, SetDb),
 	    Pid ! Result,
+	    ?MODULE:loop(SetDb);
+	{subset_query, Superset, Pid} ->
+	    Result=subsets(Superset, SetDb),
+	    Pid ! {ok, Result},
 	    ?MODULE:loop(SetDb);
 	{post, Set, Pid}->
 	    io:fwrite("in loop add", []),
