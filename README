@@ -1,0 +1,33 @@
+To build Beset with rebar:
+
+   rebar clean update-deps compile eunit  generate
+
+To start:
+
+   ./rel/beset/bin/beset start
+
+
+Beset will run on port 9999 by default:  http://127.0.0.1:9999
+
+To add a set, POST  a JSON list:
+
+   curl -v -H "Content-Type: application/json" -X POST -d '["1","2","3","4"]' http://127.0.0.1:9999
+
+To query for subsets, make a GET request to '/subsets/' with a URL encoded JSON list as the 'superset' query parameter:
+
+   curl -v http://127.0.0.1:9999/subsets?superset=%5B1%222%223%224%225%226%227%228%229%5D
+
+The response will be a JSON list of the form [{SetId: Set},{SetId: Set}...]
+
+Example:
+
+> GET /subsets?superset=%5B1%222%223%224%225%226%227%228%229%5D HTTP/1.1
+> User-Agent: curl/7.21.4 (universal-apple-darwin11.0) libcurl/7.21.4 OpenSSL/0.9.8r zlib/1.2.5
+> Host: 127.0.0.1:9999
+> Accept: */*
+> 
+< HTTP/1.1 200 Subsets
+< Content-Type: application/json; charset=UTF-8
+< Connection: close
+< 
+[{"218086788005997953991800156548497539861335154953442404": ["2", "3", "4", "1"]},{"218086788005997953991800156548497539861335155097110321": ["2", "3", "4", "1"]},{"218086788005997953991800156548497539861335160855396016": ["2", "3", "4", "1"]},{"218086788005997953991800156548497539861335161441919862": ["2", "3", "4", "1"]}]
