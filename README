@@ -1,3 +1,6 @@
+Beset is a simple DB for storing and querying set datastructures.
+
+
 To build Beset with rebar:
 
    rebar clean update-deps compile eunit  generate
